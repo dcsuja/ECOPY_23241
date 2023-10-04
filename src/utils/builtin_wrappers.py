@@ -16,10 +16,8 @@ def remove_every_element_from_list(input_list):
     input_list.clear
 
 
-
 def reverse_list(input_list):
     return input_list[::-1]
-
 
 
 def odds_from_list(input_list) :
@@ -31,11 +29,14 @@ def number_of_odds_in_list(input_list) :
 
 
 def contains_odd(input_list):
-    return [x for x in input_list if x % 2 != 0]
+    if [x for x in input_list if x % 2 != 0]:
+            return True
+    else:
+            return False
 
 
 def second_largest_in_list(input_list) :
-    return sorted_elements[-2]
+    return sorted(input_list)[-2]
 
 
 def sum_of_elements_in_list(input_list):
@@ -52,6 +53,7 @@ def cumsum_list(input_list):
 
 
 def element_wise_sum(input_list1, input_list2):
+
     if len(input_list1) != len(input_list2):
         raise ValueError("Length of list is different")
 

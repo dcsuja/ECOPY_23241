@@ -1,3 +1,6 @@
+import scipy.special
+
+
 class FirstClass:
     pass
 
@@ -129,7 +132,7 @@ class CauchyDistribution:
         cumulative_distribution = (1 / math.pi) * math.atan((x - self.loc) / self.scale) + 1/2
         return cumulative_distribution
 
-    def ppf(p):
+    def ppf(self, p):
         inverse_cumulative = self.loc + self.scale * math.tan(math.pi * (p - 1/2))
 
     def gen_random(self):
@@ -142,14 +145,97 @@ class CauchyDistribution:
     def median(self):
         return self.median
 
-    def variance():
+    def variance(self):
         raise Exception("Moment undefined")
 
-    def skeweness():
+    def skeweness(self):
         raise Exception("Moment undefined")
 
-    def ex_kurtosis():
+    def ex_kurtosis(self):
         raise Exception("Moment undefined")
 
-    def mvsk():
+    def mvsk(self):
         raise Exception("Moment undefined")
+
+
+#ab9oac
+
+import math
+import random
+import typing
+from pyerf import pyerf
+
+class LogisticDistribution:
+
+    def __init__(self, rand, loc, scale):
+        self.rand = rand
+        self.loc = loc
+        self.scale = scale
+
+    def pdf(self, x):
+        return (math.exp(-(x-self.loc)/self.scale)) / self.scale * (1 + math.exp(x-self.loc)/self.scale) ** 2)
+
+    def cdf(self, x):
+        return 0.5 + 0.5 * math.tanh((x - self.loc) / 2 * self.scale)
+
+    def ppf(self, p):
+        return self.loc + self.scale * math.log(p / (1 - p))
+
+    def gen_rand(self):
+        u = self.rand.random()
+        return self.loc + self.scale * (1.0 - 2.0 * u) / (1.0 + 2.0 * abs(1.0 - 2.0 * u))
+
+    def mean(self):
+        return self.loc
+
+    def variance(self):
+        return self.scale ** 2 * math.pi ** 2 / 3
+
+    def skeweness(self):
+        return 0
+
+    def ex_kurtosis(self):
+        return 6/5
+
+    def mvsk(self):
+        return [self.mean(), self.variance(), 0, 6/5]
+
+from scipy.special import gammainc, gamma, gammaincinv
+class ChiSquaredDistribution:
+    def __init__(self):
+        self.rand = rand
+        self.dof = dof
+
+    def pdf(self, x):
+        return  x ** ((self.dof)/2 - 1) * math.exp(-x/2) / (2 ** (self.dof / 2) * scipy.special.gamma(self.dof / 2))
+
+    def cdf(self, x):
+        return scipy.special.gamma(self.dof/2, x/2)
+
+    def ppf(self, x):
+        return (2 ** (-self.dof / 2)) / (scipy.special.gamma(self.dof / 2)) * x ** (-self.dof / 2 - 1) * math.exp ** (-1 / (2 * x))
+
+    def gen_rand(self):
+        cauchy_random = 0.0
+        for _ in range(self.dof):
+            cauchy_random += random.uniform(-1, 1)
+
+        logistic_random = 1 / (1 + math.exp(-cauchy_random))
+
+        return logistic_random
+
+    def mean(self):
+        return self.dof
+
+    def variance(self):
+        return self.dof * 2
+
+    def skeweness(self):
+        return math.sqrt( 8 / self.dof)
+
+    def ex_kurtosis(self):
+        return 12 / self.dof
+
+    def mvsk(self):
+        return [self.mean(), self.variance()]
+
