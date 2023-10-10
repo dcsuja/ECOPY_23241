@@ -162,36 +162,36 @@ class CauchyDistribution:
 
 import math
 import random
-import typing
-from pyerf import pyerf
 
 class LogisticDistribution:
 
-    def __init__(self, rand, loc, scale):
-        self.rand = rand
-        self.loc = loc
+    def __init__(self, rand, location, scale):
+        self.rand = random
+        self.location = location
         self.scale = scale
 
     def pdf(self, x):
-        return (math.exp(-(x-self.loc)/self.scale)) / self.scale * (1 + math.exp(x-self.loc)/self.scale) ** 2)
+        e_to_the_power = math.exp(-(x - self.location) / self.scale)
+        pdf_value = e_to_the_power / (self.scale * (1 + e_to_the_power) ** 2)
+        return pdf_value
 
     def cdf(self, x):
-        return 0.5 + 0.5 * math.tanh((x - self.loc) / 2 * self.scale)
+        return 0.5 + 0.5 * math.tanh((x - self.location) / (2 * self.scale))
 
     def ppf(self, p):
-        return self.loc + self.scale * math.log(p / (1 - p))
+        return self.location + self.scale * math.log(p / (1 - p))
 
     def gen_rand(self):
         u = self.rand.random()
-        return self.loc + self.scale * (1.0 - 2.0 * u) / (1.0 + 2.0 * abs(1.0 - 2.0 * u))
+        return self.location + self.scale * math.log(u / (1 - u))
 
     def mean(self):
-        return self.loc
+        return self.location
 
     def variance(self):
         return self.scale ** 2 * math.pi ** 2 / 3
 
-    def skeweness(self):
+    def skewness(self):
         return 0
 
     def ex_kurtosis(self):
@@ -201,28 +201,32 @@ class LogisticDistribution:
         return [self.mean(), self.variance(), 0, 6/5]
 
 from scipy.special import gammainc, gamma, gammaincinv
+
 class ChiSquaredDistribution:
-    def __init__(self):
-        self.rand = rand
+    def __init__(self, rand, dof):
+        if dof <= 0:
+            raise ValueError("A szabadságfoknak pozitívnak kell lennie.")
+        self.rand = random
         self.dof = dof
 
     def pdf(self, x):
-        return  x ** ((self.dof)/2 - 1) * math.exp(-x/2) / (2 ** (self.dof / 2) * scipy.special.gamma(self.dof / 2))
+        return x ** ((self.dof)/2 - 1) * math.exp(-x/2) / (2 ** (self.dof / 2) * scipy.special.gamma(self.dof / 2))
 
     def cdf(self, x):
-        return scipy.special.gamma(self.dof/2, x/2)
+        if x < 0:
+            return 0.0
 
-    def ppf(self, x):
-        return (2 ** (-self.dof / 2)) / (scipy.special.gamma(self.dof / 2)) * x ** (-self.dof / 2 - 1) * math.exp ** (-1 / (2 * x))
+        return scipy.special.gammainc(self.dof / 2.0, x / 2.0)
+
+    def ppf(self, p):
+        if p < 0.0 or p > 1.0:
+            raise ValueError("Az 'p' értéke 0 és 1 között kell legyen.")
+
+        return 2.0 * scipy.special.gammaincinv(self.dof / 2.0, p)
 
     def gen_rand(self):
-        cauchy_random = 0.0
-        for _ in range(self.dof):
-            cauchy_random += random.uniform(-1, 1)
-
-        logistic_random = 1 / (1 + math.exp(-cauchy_random))
-
-        return logistic_random
+        u = self.rand.random()
+        return self.ppf(u)
 
     def mean(self):
         return self.dof
@@ -230,12 +234,12 @@ class ChiSquaredDistribution:
     def variance(self):
         return self.dof * 2
 
-    def skeweness(self):
+    def skewness(self):
         return math.sqrt( 8 / self.dof)
 
     def ex_kurtosis(self):
         return 12 / self.dof
 
     def mvsk(self):
-        return [self.mean(), self.variance()]
+        return [self.mean(), self.variance(), self.skewness(), self.ex_kurtosis()]
 
