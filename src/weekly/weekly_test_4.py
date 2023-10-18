@@ -5,7 +5,9 @@ from typing import List, Dict
 import matplotlib
 import matplotlib.pyplot as plt
 
-euro12 = pd.read_csv('../data/Euro_2012_stats_TEAM.csv')
+
+euro12 = pd.read_csv('../../data/Euro_2012_stats_TEAM.csv')
+
 
 def number_of_participants(input_df):
     return len(input_df)
@@ -34,27 +36,17 @@ def avg_goal(input_df):
 average_goals = avg_goal(euro12)
 
 
-def countries_over_six(input_df):
-    selected_countries = input_df[input_df['Goals'] >= 6]
-    return selected_countries
+def countries_over_five(input_df):
+    selected_countries = input_df[input_df['Goals'] >= 6]['Team']
+    return pd.DataFrame(selected_countries)
 
-countries_over_six_goals = countries_over_six(euro12)
+countries_over_five_goals = countries_over_five(euro12)
 
 def countries_starting_with_g(input_df):
-    selected_countries = input_df[input_df['Team'].str.startswith('G')]
-    return selected_countries
-
-
-countries_starting_with_g_df = countries_starting_with_g(euro12)
-
-
+    return input_df[input_df['Team'].str.startswith('G')]['Team']
 
 def first_seven_columns(input_df):
-    first_seven = input_df.iloc[:, :7]
-    return first_seven
-
-first_seven_cols_df = first_seven_columns(euro12)
-
+    return pd.DataFrame(input_df.iloc[:, :7])
 
 def every_column_except_last_three(input_df):
     columns_except_last_three = input_df.iloc[:, :-3]
@@ -63,23 +55,22 @@ def every_column_except_last_three(input_df):
 columns_except_last_three_df = every_column_except_last_three(euro12)
 
 
-
 def sliced_view(input_df, columns_to_keep, column_to_filter, rows_to_keep):
-    selected_columns = input_df[columns_to_keep]
-    filtered_rows = input_df[input_df[column_to_filter].isin(rows_to_keep)]
-    return selected_columns.join(filtered_rows, how='inner', lsuffix='_left')
-
-columns_to_keep = ['Goals']
-column_to_filter = 'Team'
-rows_to_keep = ['Germany', 'Portugal']
-sliced_df = sliced_view(euro12, columns_to_keep, column_to_filter, rows_to_keep)
-
+    sliced_df = input_df[columns_to_keep]
+    sliced_df = sliced_df[sliced_df[column_to_filter].isin(rows_to_keep)]
+    return pd.DataFrame(sliced_df)
 
 def generate_quartile(input_df):
-    input_df['Quartile'] = pd.cut(input_df['Goals'], [-1, 2, 4, 5, 12], labels=[4, 3, 2, 1])
-    return input_df
+    euro12_with_quartile = input_df.copy()
 
-euro12_with_quartile = generate_quartile(euro12)
+    euro12_with_quartile.loc[(euro12_with_quartile['Goals'] >= 6) & (euro12_with_quartile['Goals'] <= 12), 'Quartile'] = 1
+    euro12_with_quartile.loc[euro12_with_quartile['Goals'] == 5, 'Quartile'] = 2
+    euro12_with_quartile.loc[(euro12_with_quartile['Goals'] >= 3) & (euro12_with_quartile['Goals'] <= 4), 'Quartile'] = 3
+    euro12_with_quartile.loc[(euro12_with_quartile['Goals'] >= 0) & (euro12_with_quartile['Goals'] <= 2), 'Quartile'] = 4
+
+    return pd.DataFrame(euro12_with_quartile)
+
+
 
 def average_yellow_in_quartiles(input_df):
     average_yellow_df = input_df.groupby('Quartile')['Passes'].mean().reset_index()
@@ -88,13 +79,17 @@ def average_yellow_in_quartiles(input_df):
 
 average_yellow_in_quartiles_df = average_yellow_in_quartiles(euro12_with_quartile)
 
+
 def minmax_block_in_quartile(input_df):
-    minmax_block_df = input_df.groupby('Quartile')['Blocks'].agg(['min', 'max']).reset_index()
-    minmax_block_df.rename(columns={'min': 'Minimum Blocks', 'max': 'Maximum Blocks'}, inplace=True)
-    return minmax_block_df
+    result_df = input_df.groupby('Quartile')['Blocks'].agg(['min', 'max']).reset_index()
+    result_df.columns = ['Quartile', 'Min Blocks', 'Max Blocks']
 
-minmax_block_in_quartile_df = minmax_block_in_quartile(euro12_with_quartile)
+    return result_df
 
+
+# Teszt
+quartile_df = generate_quartile(euro12)  # Mivel a függvény a Quartile oszlopot használja, először generáljuk azt
+print(minmax_block_in_quartile(quartile_df))
 
 import matplotlib.pyplot as plt
 
