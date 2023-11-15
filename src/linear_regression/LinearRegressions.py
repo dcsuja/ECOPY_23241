@@ -34,17 +34,17 @@ class LinearRegressionSM:
 
         result = f"Adjusted R-squared: {adjusted_r_squared:.3f}, Akaike IC: {aic:.3f}, Bayes IC: {bic:.3f}"
         return result
-
-
+class LinearRegressionNP():
+    pass
 
 import pandas as pd
 import pathlib
 from typing import List, Union, Any
 import numpy as np
+import numpy.linalg as la
 from scipy.stats import t, f
 
 df_sp500 = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/sp500.parquet', engine='fastparquet')
-
 df_factors = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/ff_factors.parquet', engine='fastparquet')
 
 merged_df = pd.merge(df_sp500, df_factors, on='Date', how='left')
@@ -61,6 +61,9 @@ class LinearRegressionGLS:
         self.left_hand_side = left_hand_side
         self.right_hand_side = right_hand_side
         self._model = None
+        self.coefficients = None
+        self.values = None
+        self.standard_errors = None
 
     import numpy.linalg as la
 
@@ -89,19 +92,54 @@ class LinearRegressionGLS:
     def get_params(self):
             return pd.Series(self.coefficients, name="Beta coefficients")
 
-    from scipy.stats import t
-
-
-
     def get_pvalues(self):
 
         t_statistics = self.coefficients / self.standard_errors
 
         p_values = [min(t.cdf(t_stat, df=len(self.left_hand_side) - len(self.coefficients)),
-                            1 - t.cdf(t_stat, df=len(self.left_hand_side) - len(self.coefficients))) * 2
-                        for t_stat in t_statistics]
+                        1 - t.cdf(t_stat, df=len(self.left_hand_side) - len(self.coefficients))) * 2
+                    for t_stat in t_statistics]
 
         return pd.Series(p_values, index=["P-values for the corresponding coefficients"])
+
+    def get_wald_test_result(self, R):
+        R = np.array(R)
+        beta = self.coefficients
+        X_with_const = np.hstack([np.ones((self.right_hand_side.shape[0], 1)), self.right_hand_side.values])
+        V_inv = np.linalg.inv(X_with_const.T @ X_with_const)
+        wald_stat = (R @ beta).T @ np.linalg.inv(R @ V_inv @ R.T) @ (R @ beta)
+
+        k = R.shape[0]
+        F_stat = wald_stat / k
+        df1 = k
+        df2 = self.right_hand_side.shape[0] - np.linalg.matrix_rank(X_with_const)
+        p_value = f.sf(F_stat, df1, df2)
+
+        return f"Wald: {wald_stat:.3f}, p-value: {p_value:.3f}"
+
+    def get_model_goodness_values(self):
+        y = self.left_hand_side.values
+        X = self.right_hand_side.values
+        X_with_const = np.hstack([np.ones((X.shape[0], 1)), X])
+        y_hat = X_with_const @ self.coefficients
+
+        TSS = np.sum((y - np.mean(y)) ** 2)
+
+        SSE = np.sum((y - y_hat) ** 2)
+
+        R_squared = 1 - (SSE / TSS)
+
+        n = len(y)
+        p = X_with_const.shape[1]
+        Adjusted_R_squared = 1 - ((SSE / (n - p)) / (TSS / (n - 1)))
+
+        return f"Centered R-squared: {R_squared:.3f}, Adjusted R-squared: {Adjusted_R_squared:.3f}"
+
+
+
+
+
+
 
 
 
