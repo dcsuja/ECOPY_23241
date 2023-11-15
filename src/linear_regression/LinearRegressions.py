@@ -1,3 +1,7 @@
+import pandas as pd
+import statsmodels.api as sm
+import numpy as np
+
 class LinearRegressionSM:
     def __init__(self, left_hand_side: pd.DataFrame, right_hand_side: pd.DataFrame):
         self.left_hand_side = left_hand_side
@@ -30,6 +34,77 @@ class LinearRegressionSM:
 
         result = f"Adjusted R-squared: {adjusted_r_squared:.3f}, Akaike IC: {aic:.3f}, Bayes IC: {bic:.3f}"
         return result
+
+
+
+import pandas as pd
+import pathlib
+from typing import List, Union, Any
+import numpy as np
+from scipy.stats import t, f
+
+df_sp500 = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/sp500.parquet', engine='fastparquet')
+
+df_factors = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/ff_factors.parquet', engine='fastparquet')
+
+merged_df = pd.merge(df_sp500, df_factors, on='Date', how='left')
+
+merged_df['Excess Return'] = merged_df['Monthly Returns'] - merged_df['RF']
+
+merged_df['ex_ret_1'] = merged_df.groupby('Symbol')['Excess Return'].shift(-1)
+
+merged_df.dropna(subset=['ex_ret_1', 'HML'], inplace=True)
+
+
+class LinearRegressionGLS:
+    def __init__(self, left_hand_side, right_hand_side):
+        self.left_hand_side = left_hand_side
+        self.right_hand_side = right_hand_side
+        self._model = None
+
+    import numpy.linalg as la
+
+    def fgls_regression(left_hand_side, right_hand_side):
+
+        X = right_hand_side
+        y = left_hand_side
+        X_with_const = np.hstack([np.ones((X.shape[0], 1)), X.values])
+        ols_coefficients = la.inv(X_with_const.T @ X_with_const) @ X_with_const.T @ y.values
+
+        residuals = y.values - X_with_const @ ols_coefficients
+
+        squared_residuals = residuals ** 2
+
+        y_new = np.log(squared_residuals)
+        new_model_coefficients = la.inv(X_with_const.T @ X_with_const) @ X_with_const.T @ y_new
+
+        predicted_errors = np.exp(X_with_const @ new_model_coefficients)
+
+        V_inv = np.diag(1 / predicted_errors)
+
+        gls_coefficients = la.inv(X_with_const.T @ V_inv @ X_with_const) @ X_with_const.T @ V_inv @ y.values
+
+        return pd.Series(gls_coefficients, index=["Intercept"] + right_hand_side.columns.tolist())
+
+    def get_params(self):
+            return pd.Series(self.coefficients, name="Beta coefficients")
+
+    from scipy.stats import t
+
+
+
+    def get_pvalues(self):
+
+        t_statistics = self.coefficients / self.standard_errors
+
+        p_values = [min(t.cdf(t_stat, df=len(self.left_hand_side) - len(self.coefficients)),
+                            1 - t.cdf(t_stat, df=len(self.left_hand_side) - len(self.coefficients))) * 2
+                        for t_stat in t_statistics]
+
+        return pd.Series(p_values, index=["P-values for the corresponding coefficients"])
+
+
+
 
 
 
