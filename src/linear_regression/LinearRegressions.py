@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import statsmodels.api as sm
 import numpy as np
@@ -34,8 +36,87 @@ class LinearRegressionSM:
 
         result = f"Adjusted R-squared: {adjusted_r_squared:.3f}, Akaike IC: {aic:.3f}, Bayes IC: {bic:.3f}"
         return result
-class LinearRegressionNP():
-    pass
+import statsmodels.api as sm
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+
+class LinearRegressionSM:
+    def __init__(self, left_hand_side, right_hand_side):
+        self.left_hand_side = left_hand_side
+        self.right_hand_side = right_hand_side
+        self._model = None
+
+    def fit(self):
+        alfa = sm.add_constant(self.right_hand_side)
+        beta_0 = self.left_hand_side
+        self._model = sm.OLS(beta_0, alfa).fit()
+
+    def get_params(self):
+        return self._model.params.rename('Beta coefficients')
+
+    def get_pvalues(self):
+        return self._model.pvalues.rename('P-values for the corresponding coefficients')
+
+    def get_wald_test_result(self, restrictions):
+        wald_test = self._model.wald_test(restrictions)
+        fvalue = float(wald_test.statistic)
+        pvalue = float(wald_test.pvalue)
+        return f'F-value: {fvalue:.3}, p-value: {pvalue:.3}'
+
+    def get_model_goodness_values(self):
+        ars = self._model.rsquared_adj
+        ak = self._model.aic
+        by = self._model.bic
+        return f'Adjusted R-squared: {ars:.3}, Akaike IC: {ak:.3}, Bayes IC: {by:.3}'
+
+
+class LinearRegressionNP:
+    def __init__(self, left_hand_side, right_hand_side):
+        self.left_hand_side = left_hand_side
+        self.right_hand_side = right_hand_side
+
+    def fit(self):
+        self.right_hand_side = pd.concat([pd.Series(1, index=self.right_hand_side.index, name='Constant'),
+                                         self.right_hand_side], axis=1)
+        self.X = self.right_hand_side.to_numpy()
+        self.y = self.left_hand_side.to_numpy()
+        self.beta = np.linalg.inv(self.X.T @ self.X) @ self.X.T @ self.y
+        self.beta_coefficients = pd.Series(self.beta, index=self.right_hand_side.columns, name='Beta coefficients')
+
+    def get_params(self):
+        return self.beta_coefficients
+
+    def get_pvalues(self):
+        n, K = self.right_hand_side.shape[0], self.right_hand_side.shape[1]
+        SSE = ((self.y - self.X @ self.beta) ** 2).sum() / (n - K)
+        XTX_inv = np.linalg.inv(self.X.T @ self.X)
+        t_stats = self.beta / np.sqrt(SSE * np.diag(XTX_inv))
+        p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=n - K))
+        return pd.Series(p_values, index=self.right_hand_side.columns,
+                         name='P-values for the corresponding coefficients')
+
+    def get_wald_test_result(self, R):
+        RES = self.y - self.X @ self.beta
+        R_M = np.array(R)
+        R = R_M @ self.beta
+        n = len(self.left_hand_side)
+        M, K = R_M.shape
+        Sigma2 = np.sum(RES ** 2) / (n-K)
+        H = R_M @ np.linalg.inv(self.X.T @ self.X) @ R_M.T
+        wald_value = (R.T @ np.linalg.inv(H) @ R) / (M*Sigma2)
+        p_value = 1 - stats.f.cdf(wald_value, dfn=M, dfd=n-K)
+        return f"Wald: {wald_value:.3f}, p-value: {p_value:.3f}"
+
+    def get_model_goodness_values(self) -> str:
+        n, K = self.right_hand_side.shape[0], self.right_hand_side.shape[1]
+        SSE = ((self.y - self.X @ self.beta) ** 2).sum()
+        SST = ((self.y - self.y.mean()) ** 2).sum()
+        SSR = SST - SSE
+        crs = SSR / SST
+        ars = 1 - (1 - crs) * ((n - 1) / (n - K))
+        return f"Centered R-squared: {crs:.3f}, Adjusted R-squared: {ars:.3f}"
 
 import pandas as pd
 import pathlib
@@ -44,17 +125,17 @@ import numpy as np
 import numpy.linalg as la
 from scipy.stats import t, f
 
-df_sp500 = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/sp500.parquet', engine='fastparquet')
-df_factors = pd.read_parquet('Macintosh HD/Felhasználók/csujadaniel/Dokumentumok/GitHub/ECOPY_23241/data/ff_factors.parquet', engine='fastparquet')
 
-merged_df = pd.merge(df_sp500, df_factors, on='Date', how='left')
-
+sp500_df = pd.read_parquet('../../data/sp500.parquet', engine='fastparquet')
+ff_factors_df = pd.read_parquet('../../data/ff_factors.parquet', engine='fastparquet')
+merged_df = pd.merge(sp500_df, ff_factors_df, on='Date', how='left')
 merged_df['Excess Return'] = merged_df['Monthly Returns'] - merged_df['RF']
-
+merged_df = merged_df.sort_values(by='Date')
 merged_df['ex_ret_1'] = merged_df.groupby('Symbol')['Excess Return'].shift(-1)
-
-merged_df.dropna(subset=['ex_ret_1', 'HML'], inplace=True)
-
+merged_df = merged_df.dropna(subset=['ex_ret_1'])
+merged_df = merged_df.dropna(subset=['HML'])
+amazon_df = merged_df[merged_df['Symbol'] == 'AMZN']
+amazon_df = amazon_df.drop(columns=['Symbol'])
 
 class LinearRegressionGLS:
     def __init__(self, left_hand_side, right_hand_side):
@@ -67,30 +148,26 @@ class LinearRegressionGLS:
 
     import numpy.linalg as la
 
-    def fgls_regression(left_hand_side, right_hand_side):
-
-        X = right_hand_side
-        y = left_hand_side
+    def fit(self):
+        X = self.right_hand_side
         X_with_const = np.hstack([np.ones((X.shape[0], 1)), X.values])
-        ols_coefficients = la.inv(X_with_const.T @ X_with_const) @ X_with_const.T @ y.values
 
-        residuals = y.values - X_with_const @ ols_coefficients
+        y = self.left_hand_side.values
 
-        squared_residuals = residuals ** 2
+        beta_ols = np.linalg.inv(X_with_const.T @ X_with_const) @ X_with_const.T @ y
 
-        y_new = np.log(squared_residuals)
-        new_model_coefficients = la.inv(X_with_const.T @ X_with_const) @ X_with_const.T @ y_new
+        residuals = y - X_with_const @ beta_ols
+        sigma_squared = np.var(residuals, ddof=X_with_const.shape[1])
 
-        predicted_errors = np.exp(X_with_const @ new_model_coefficients)
+        W_inv = np.diag([1 / sigma_squared] * len(y))
 
-        V_inv = np.diag(1 / predicted_errors)
+        beta_fgls = np.linalg.inv(X_with_const.T @ W_inv @ X_with_const) @ X_with_const.T @ W_inv @ y
 
-        gls_coefficients = la.inv(X_with_const.T @ V_inv @ X_with_const) @ X_with_const.T @ V_inv @ y.values
-
-        return pd.Series(gls_coefficients, index=["Intercept"] + right_hand_side.columns.tolist())
+        self.coefficients = beta_fgls
+        return self.coefficients
 
     def get_params(self):
-            return pd.Series(self.coefficients, name="Beta coefficients")
+        return pd.Series(self.coefficients, name="Beta coefficients")
 
     def get_pvalues(self):
 
@@ -136,6 +213,76 @@ class LinearRegressionGLS:
         return f"Centered R-squared: {R_squared:.3f}, Adjusted R-squared: {Adjusted_R_squared:.3f}"
 
 
+sp500_df = pd.read_parquet('../../data/sp500.parquet', engine='fastparquet')
+ff_factors_df = pd.read_parquet('../../data/ff_factors.parquet', engine='fastparquet')
+merged_df = pd.merge(sp500_df, ff_factors_df, on='Date', how='left')
+merged_df['Excess Return'] = merged_df['Monthly Returns'] - merged_df['RF']
+merged_df = merged_df.sort_values(by='Date')
+merged_df['ex_ret_1'] = merged_df.groupby('Symbol')['Excess Return'].shift(-1)
+merged_df = merged_df.dropna(subset=['ex_ret_1'])
+merged_df = merged_df.dropna(subset=['ex_ret_1', 'HML'])
+amazon_df = merged_df[merged_df['Symbol'] == 'AMZN']
+amazon_df = amazon_df.drop(columns=['Symbol'])
+
+from pathlib import Path
+import pandas as pd
+import typing
+import numpy as np
+from scipy import stats
+from scipy.stats import norm
+from scipy.optimize import minimize
+
+class LinearRegressionML:
+    def __init__(self, left_hand_side: pd.DataFrame, right_hand_side: pd.DataFrame):
+        self.left_hand_side = left_hand_side
+        self.right_hand_side = right_hand_side
+        self.right_hand_side.insert(0, 'const', 1)
+        self.params = None
+        self.pvalues = None
+        self.crs = None
+        self.ars = None
+        self.sigma2 = None
+
+    def fit(self):
+        def negative_log_likelihood(params):
+            beta = params[:-1]
+            sigma2 = params[-1]
+            predicted = np.dot(self.right_hand_side, beta)
+            residuals = self.left_hand_side - predicted
+            n = len(self.left_hand_side)
+            log_likelihood = -(-n/2 * np.log(2 * np.pi * sigma2) - np.sum(residuals**2) / (2 * sigma2))
+            return -log_likelihood
+
+        initial_params = np.ones(self.right_hand_side.shape[1] + 1) * 0.1
+        initial_params[-1] = 1
+
+        result = minimize(negative_log_likelihood, initial_params, method='L-BFGS-B')
+        self.params = result.x[:-1]
+        self.sigma2 = result.x[-1]
+
+        predictions = self.right_hand_side.dot(self.params)
+        residuals = self.left_hand_side - predictions
+        rss = np.sum(residuals ** 2)
+        tss = np.sum((self.left_hand_side - self.left_hand_side.mean()) ** 2)
+        self.crs = 1 - rss / tss
+        n = len(self.left_hand_side)
+        p = self.right_hand_side.shape[1]
+        self.ars = 1 - (rss / (n - p)) / (tss / (n - 1))
+
+        stderr = np.sqrt(
+            np.diagonal(np.linalg.pinv(np.dot(self.right_hand_side.T, self.right_hand_side)) * rss / (n - p)))
+        t_stats = self.params / stderr
+        self.pvalues = 2 * np.minimum(t.sf(np.abs(t_stats), n - p), t.cdf(-np.abs(t_stats), n - p))
+
+    def get_params(self):
+        return pd.Series(self.params, index=self.right_hand_side.columns, name="Beta coefficients")
+
+    def get_pvalues(self):
+        return pd.Series(self.pvalues, index=self.right_hand_side.columns,
+                         name="P-values for the corresponding coefficients")
+
+    def get_model_goodness_values(self):
+        return f"Centered R-squared: {self.crs:.3f}, Adjusted R-squared: {self.ars:.3f}"
 
 
 
