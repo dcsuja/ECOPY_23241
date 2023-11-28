@@ -3,6 +3,8 @@ import math
 import pandas as pd
 import statsmodels.api as sm
 import numpy as np
+from statsmodels.tools import add_constant
+
 
 class LinearRegressionSM:
     def __init__(self, left_hand_side: pd.DataFrame, right_hand_side: pd.DataFrame):
@@ -231,58 +233,61 @@ import numpy as np
 from scipy import stats
 from scipy.stats import norm
 from scipy.optimize import minimize
+from statsmodels.tools.tools import add_constant
 
 class LinearRegressionML:
-    def __init__(self, left_hand_side: pd.DataFrame, right_hand_side: pd.DataFrame):
+    def __init__(self, left_hand_side, right_hand_side):
         self.left_hand_side = left_hand_side
         self.right_hand_side = right_hand_side
-        self.right_hand_side.insert(0, 'const', 1)
-        self.params = None
-        self.pvalues = None
-        self.crs = None
-        self.ars = None
-        self.sigma2 = None
+        self.right_hand_side = add_constant(self.right_hand_side)
+        self._params = None
 
     def fit(self):
-        def negative_log_likelihood(params):
-            beta = params[:-1]
-            sigma2 = params[-1]
-            predicted = np.dot(self.right_hand_side, beta)
-            residuals = self.left_hand_side - predicted
-            n = len(self.left_hand_side)
-            log_likelihood = -(-n/2 * np.log(2 * np.pi * sigma2) - np.sum(residuals**2) / (2 * sigma2))
+        def neg_log_likelihood(params, X, y):
+            predicted = np.dot(X, params)
+            log_likelihood = -0.5 * (np.log(2 * np.pi * np.var(y)) + np.sum((y - predicted) ** 2) / np.var(y))
             return -log_likelihood
 
-        initial_params = np.ones(self.right_hand_side.shape[1] + 1) * 0.1
-        initial_params[-1] = 1
-
-        result = minimize(negative_log_likelihood, initial_params, method='L-BFGS-B')
-        self.params = result.x[:-1]
-        self.sigma2 = result.x[-1]
-
-        predictions = self.right_hand_side.dot(self.params)
-        residuals = self.left_hand_side - predictions
-        rss = np.sum(residuals ** 2)
-        tss = np.sum((self.left_hand_side - self.left_hand_side.mean()) ** 2)
-        self.crs = 1 - rss / tss
-        n = len(self.left_hand_side)
-        p = self.right_hand_side.shape[1]
-        self.ars = 1 - (rss / (n - p)) / (tss / (n - 1))
-
-        stderr = np.sqrt(
-            np.diagonal(np.linalg.pinv(np.dot(self.right_hand_side.T, self.right_hand_side)) * rss / (n - p)))
-        t_stats = self.params / stderr
-        self.pvalues = 2 * np.minimum(t.sf(np.abs(t_stats), n - p), t.cdf(-np.abs(t_stats), n - p))
+        initial_params = np.zeros(self.right_hand_side.shape[1]) + 0.1
+        try:
+            result = minimize(neg_log_likelihood, initial_params, args=(self.right_hand_side, self.left_hand_side),
+                              method='L-BFGS-B')
+            self._params = result.x
+        except Exception as e:
+            raise ValueError(f"MLE fit failed: {e}")
 
     def get_params(self):
-        return pd.Series(self.params, index=self.right_hand_side.columns, name="Beta coefficients")
+            return pd.Series(self._params, index=self.right_hand_side.columns, name='Beta coefficients')
 
     def get_pvalues(self):
-        return pd.Series(self.pvalues, index=self.right_hand_side.columns,
-                         name="P-values for the corresponding coefficients")
+        def neg_log_likelihood(params, X, y):
+            predicted = np.dot(X, params)
+            log_likelihood = -0.5 * (np.log(2 * np.pi * np.var(y)) + np.sum((y - predicted) ** 2) / np.var(y))
+            return -log_likelihood
+
+        full_model_ll = neg_log_likelihood(self._params, self.right_hand_side, self.left_hand_side)
+
+        p_values = []
+        for i in range(len(self._params)):
+            params_restricted = self._params.copy()
+            params_restricted[i] = 0
+
+            restricted_model_ll = neg_log_likelihood(params_restricted, self.right_hand_side, self.left_hand_side)
+
+            lr_stat = 2 * (full_model_ll - restricted_model_ll)
+            p_value = 1 - chi2.cdf(lr_stat, df=1)
+            p_values.append(p_value)
+
+        return pd.Series(p_values, index=self.right_hand_side.columns,
+                         name='P-values for the corresponding coefficients')
 
     def get_model_goodness_values(self):
-        return f"Centered R-squared: {self.crs:.3f}, Adjusted R-squared: {self.ars:.3f}"
+            residuals = self.left_hand_side - np.dot(self.right_hand_side, self._params)
+            SSE = np.sum(residuals ** 2)
+            SST = np.sum((self.left_hand_side - np.mean(self.left_hand_side)) ** 2)
+            r_squared = 1 - (SSE / SST)
+            adj_r_squared = 1 - (1 - r_squared) * (len(self.left_hand_side) - 1) / (len(self.left_hand_side) - len(self.right_hand_side.columns))
+            return f'Centered R-squared: {r_squared:.3f}, Adjusted R-squared: {adj_r_squared:.3f}'
 
 
 
